@@ -6,7 +6,10 @@ dist/
 *.egg-info/
 *.pyc
 *.pyo
+.eggs/
 
+# Test generated
+.tox/
 
 # Ignore pyenv files.
 

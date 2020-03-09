@@ -6,9 +6,9 @@ import os
 import numpy
 import pytest
 
-from orion.algo.space import Integer, Real, Space
+from orion.algo.space import Fidelity, Integer, Real, Space
 import orion.core.cli
-from orion.core.io.experiment_builder import ExperimentBuilder
+import orion.core.io.experiment_builder as experiment_builder
 from orion.core.utils.tests import OrionState
 from orion.core.worker.primary_algo import PrimaryAlgo
 
@@ -40,33 +40,38 @@ def space():
     space.register(dim1)
     dim2 = Real('yolo2', 'uniform', 0, 1)
     space.register(dim2)
+    dim3 = Fidelity('yolo3', 1, 4, 2)
+    space.register(dim3)
 
     return space
 
 
-def test_seeding(space):
-    """Verify that seeding makes sampling deterministic"""
+def test_seed_rng(space):
+    """Test that algo is seeded properly"""
     optimizer = PrimaryAlgo(space, 'hyperband')
-
     optimizer.seed_rng(1)
-    a = optimizer.suggest(1)[0]
-    assert not numpy.allclose(a, optimizer.suggest(1)[0])
+    a = optimizer.suggest(1)
+    # Hyperband will always return the full first rung
+    assert numpy.allclose(a, optimizer.suggest(1))
 
-    optimizer.seed_rng(1)
-    assert numpy.allclose(a, optimizer.suggest(1)[0])
+    optimizer.seed_rng(2)
+    assert not numpy.allclose(a, optimizer.suggest(1))
 
 
 def test_set_state(space):
-    """Verify that resetting state makes sampling deterministic"""
+    """Test that state is reset properly"""
     optimizer = PrimaryAlgo(space, 'hyperband')
-
     optimizer.seed_rng(1)
     state = optimizer.state_dict
-    a = optimizer.suggest(1)[0]
-    assert not numpy.allclose(a, optimizer.suggest(1)[0])
+    points = optimizer.suggest(1)
+    # Hyperband will always return the full first rung
+    assert numpy.allclose(points, optimizer.suggest(1))
+
+    optimizer.seed_rng(2)
+    assert not numpy.allclose(points, optimizer.suggest(1))
 
     optimizer.set_state(state)
-    assert numpy.allclose(a, optimizer.suggest(1)[0])
+    assert numpy.allclose(points, optimizer.suggest(1))
 
 
 def test_optimizer(monkeypatch):
@@ -78,7 +83,8 @@ def test_optimizer(monkeypatch):
         orion.core.cli.main(["hunt", "--name", "exp", "--max-trials", "5", "--config",
                              "./benchmark/hyperband.yaml",
                              "./benchmark/rosenbrock.py",
-                             "-x~uniform(-5, 5)"])
+                             "-x~uniform(-5, 5)",
+                             "-y~fidelity(1, 4, 2)"])
 
 
 def test_int(monkeypatch):
@@ -90,7 +96,8 @@ def test_int(monkeypatch):
         orion.core.cli.main(["hunt", "--name", "exp", "--max-trials", "5", "--config",
                              "./benchmark/hyperband.yaml",
                              "./benchmark/rosenbrock.py",
-                             "-x~uniform(-5, 5, discrete=True)"])
+                             "-x~uniform(-5, 5, discrete=True)",
+                             "-y~fidelity(1, 4, 2)"])
 
 
 def test_categorical(monkeypatch):
@@ -102,7 +109,8 @@ def test_categorical(monkeypatch):
         orion.core.cli.main(["hunt", "--name", "exp", "--max-trials", "5", "--config",
                              "./benchmark/hyperband.yaml",
                              "./benchmark/rosenbrock.py",
-                             "-x~choices([-5, -2, 0, 2, 5])"])
+                             "-x~choices([-5, -2, 0, 2, 5])",
+                             "-y~fidelity(1, 4, 2)"])
 
 
 def test_optimizer_two_inputs(monkeypatch):
@@ -114,7 +122,8 @@ def test_optimizer_two_inputs(monkeypatch):
         orion.core.cli.main(["hunt", "--name", "exp", "--max-trials", "5", "--config",
                              "./benchmark/hyperband.yaml",
                              "./benchmark/rosenbrock.py",
-                             "-x~uniform(-5, 5)", "-y~uniform(-10, 10)"])
+                             "-x~uniform(-5, 5)", "-y~uniform(-10, 10)",
+                             "-z~fidelity(1, 4, 2)"])
 
 
 def test_optimizer_actually_optimize(monkeypatch):
@@ -127,10 +136,11 @@ def test_optimizer_actually_optimize(monkeypatch):
         orion.core.cli.main(["hunt", "--name", "exp", "--max-trials", "20", "--config",
                              "./benchmark/hyperband.yaml",
                              "./benchmark/rosenbrock.py",
-                             "-x~uniform(-50, 50)"])
+                             "-x~uniform(-50, 50)",
+                             "-y~fidelity(1, 4, 2)"])
 
         with open("./benchmark/hyperband.yaml", "r") as f:
-            exp = ExperimentBuilder().build_view_from(
+            exp = experiment_builder.build_view_from_args(
                 {'name': 'exp', 'config': f})
 
         objective = exp.stats['best_evaluation']
